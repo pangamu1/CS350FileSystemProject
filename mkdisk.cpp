@@ -42,6 +42,10 @@ void make_disk_file(int numBlocks, int blockSize, string diskFileName){
 		fprintf(stderr, "Opening file failed\n");
 		exit(0);
 	}	 	
-	ftruncate(myfile, numBlocks*blockSize);
+	if (ftruncate(myfile, numBlocks*blockSize) == -1){
+		fprintf(stderr, "Truncate failed");
+		close(myfile);
+		exit(0);
+	}
 	close(myfile);
 }
