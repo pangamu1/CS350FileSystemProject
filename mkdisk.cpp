@@ -38,6 +38,10 @@ int main(int argc, char** argv){
 
 void make_disk_file(int numBlocks, int blockSize, string diskFileName){
 	int myfile = open(diskFileName.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+	if (myfile == -1){
+		fprintf(stderr, "Opening file failed\n");
+		exit(0);
+	}	 	
 	ftruncate(myfile, numBlocks*blockSize);
 	close(myfile);
 }
