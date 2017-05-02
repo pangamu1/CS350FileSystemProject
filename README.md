@@ -1,5 +1,5 @@
 # CS350FileSystemProject
--make disk
+-make disk\n
 --superblock
 --inode/data bitmap
 -disk functions
