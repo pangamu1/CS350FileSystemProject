@@ -11,8 +11,9 @@
 using namespace std;
 
 void make_disk_file(int numBlocks, int blockSize, string diskFileName);
-void initiateDisk(int numBlocks, int blockSize, string diskFileName);
+int initiateDisk(int numBlocks, int blockSize, string diskFileName);
 void check();
+void updateSuper(int num,int num2);
 
 
 int main(int argc, char** argv){
@@ -38,7 +39,9 @@ int main(int argc, char** argv){
 	}
 	make_disk_file(numBlks, blkSize, filename);
 	initiateDisk(numBlks,blkSize,filename);
-	check();
+	//check();
+	//updateSuper(off,-1);
+	//check();
 	return 0;
 }
 
@@ -58,9 +61,9 @@ void make_disk_file(int numBlocks, int blockSize, string diskFileName){
 	close(myfile);
 }
 
-void initiateDisk(int numBlocks, int blockSize, string diskFileName){
+int initiateDisk(int numBlocks, int blockSize, string diskFileName){
 	FILE *fd;
-	int off;
+	int off,off1;
 	fd=fopen(diskFileName.c_str(),"wb");
 	perror("FIle null");	
 	//fseek(fd,0,0);
@@ -83,6 +86,7 @@ void initiateDisk(int numBlocks, int blockSize, string diskFileName){
 		fseek(fd,4*s.BS,0);
 		off=4;
 	}
+	
 	bool free[numBlocks];
 	for(int i=0;i<numBlocks;i++) free[i]=true;
 	free[1]=false;
@@ -95,17 +99,42 @@ void initiateDisk(int numBlocks, int blockSize, string diskFileName){
 		}
 			countB++;
 	}
-	off+=countB;
+	off1=off+countB;
 	fseek(fd,(off)*s.BS,0);
 	for(int i=0;i<256;i++){
 		Inode *in=new Inode();
 		fwrite(&in,sizeof(in),1,fd);
-		off++;
+		off1++;
 	}
+	fclose(fd);
+	check();
+	updateSuper(off1,off);
+	check();
+	return off1;
+}
+
+void updateSuper(int num,int num2){
+	FILE *fd;
+	//cout<<num<<num2<<endl;
+	fd=fopen("DISK","rb");
+	char ch[256];
+	fread(ch,128,1,fd);
+	SuperBlock *s;
+	s=(SuperBlock *) ch;
+	//if(num!=-1){
+		s->freeB=s->freeB-num;
+		s->off=num;
+	//}
+	//if(num2!=-1){
+		s->freeBA=num2;
+		s->inode=s->off-256;
+	//}
+	fclose(fd);
+	fd=fopen("DISK","wb");
+	fwrite(&s, sizeof(s),1,fd);
 	fclose(fd);
 
 }
-
 void check(){
 	FILE *fd;
 	fd=fopen("DISK","rb");
@@ -113,5 +142,7 @@ void check(){
 	fread(ch,128,1,fd);
 	SuperBlock *s;
 	s=(SuperBlock *) ch;
-	cout<<s->numB<<endl;
+	cout<<s->freeB<<endl;
+	cout<<s->off<<endl;
+	cout<<s->inode<<endl;
 }

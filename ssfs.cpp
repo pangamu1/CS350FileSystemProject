@@ -34,9 +34,9 @@ int main(){
 			inArr[i]=(bool) ch[i];
 		}
 	}
-	fseek(fd,s->inode,0);
+	fseek(fd,s->freeBA,0);
 	int count=0;
-	int countB=s->inode;
+	int countB=s->freeBA;
 	while(count<s->numB){
 		fread(ch,s->BS,1,fd);
 		for(int i=0;i<s->BS;i++){
@@ -50,7 +50,7 @@ int main(){
 	char in[s->BS];
 	for(int i=0;i<256;i++){
 		if(!inArr[i]){
-			fseek(fd,(s->BS)*(s->off+i),0);
+			fseek(fd,(s->BS)*(s->inode+i),0);
 			fread(in,s->BS,1,fd);
 			Inode *n;
 			n=(Inode*) in;
