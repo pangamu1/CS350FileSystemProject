@@ -7,11 +7,12 @@
 #include <sys/stat.h>
 #include "SuperBlock.cpp"
 #include "Inode.h"
+#include <cstring>
 
 using namespace std;
 
 void make_disk_file(int numBlocks, int blockSize, string diskFileName);
-int initiateDisk(int numBlocks, int blockSize, string diskFileName);
+void initiateDisk(int numBlocks, int blockSize, string diskFileName);
 void check();
 void updateSuper(int num,int num2);
 
@@ -61,76 +62,82 @@ void make_disk_file(int numBlocks, int blockSize, string diskFileName){
 	close(myfile);
 }
 
-int initiateDisk(int numBlocks, int blockSize, string diskFileName){
+void initiateDisk(int numBlocks, int blockSize, string diskFileName){
 	FILE *fd;
 	int off,off1;
-	fd=fopen(diskFileName.c_str(),"wb");
+	fd=fopen(diskFileName.c_str(),"rb+");
+	//fd=open(diskFileName.c_str(), O_RDWR | O_CREAT, 0600);
 	perror("FIle null");	
 	//fseek(fd,0,0);
 	SuperBlock s(numBlocks,blockSize,numBlocks,256);
 	fwrite(&s, sizeof(s),1,fd);
-	bool b[256];
-	for(int i=0;i<256;i++) b[i]=true;
+	//cout<<s.freeB<<endl;
+	
+	//for(int i=0;i<256;i++) b[i]=1;
 	fseek(fd,s.BS,0);
-	if(sizeof(b)<blockSize){
+	if(blockSize>=256){
+		bool b[256];
+		for(int i=0;i<256;i++) b[i]=true;
+		fwrite(&b,sizeof(b),1,fd);
+		fseek(fd,2*s.BS,0);
+		off=2;
+	}else{
+		bool b[128]={true};
+		for(int i=0;i<128;i++) b[i]=true;
+		fwrite(&b,sizeof(b),1,fd);
+		fseek(fd,2*s.BS,0);
 		fwrite(&b,sizeof(b),1,fd);
 		fseek(fd,3*s.BS,0);
 		off=3;
-	}else{
-		for(int i=0;i<blockSize;i++){
-			fwrite(&b[i],1,1,fd);
-		}
-		for(int i=blockSize;i<sizeof(b);i++){
-			fwrite(&b[i],1,1,fd);
-		}
-		fseek(fd,4*s.BS,0);
-		off=4;
 	}
-	
+	//check();
 	bool free[numBlocks];
-	for(int i=0;i<numBlocks;i++) free[i]=true;
-	free[1]=false;
+	for(int i=0;i<blockSize;i++) free[i]=true;
+	for(int i=0;i<off;i++)free[i]=false;
 	int count=0;
-	int countB=0;
-	while(count<sizeof(free)){
-		for(int i=countB*blockSize;i<(countB+1)*blockSize;i++){
-			fwrite(&free[i],1,1,fd);
-			count++;
-		}
-			countB++;
+	int countB=off+1;
+	fwrite(&free,sizeof(free),1,fd);
+	fseek(fd,countB*s.BS,0);
+	for(int i=0;i<blockSize;i++) free[i]=true;
+	while(count<numBlocks){
+		fwrite(&free,sizeof(free),1,fd);
+		count+=blockSize;
+		countB++;
+		fseek(fd,countB*s.BS,0);
 	}
-	off1=off+countB;
-	fseek(fd,(off)*s.BS,0);
+	off1=countB;
+	fseek(fd,(off1)*s.BS,0);
 	for(int i=0;i<256;i++){
 		Inode *in=new Inode();
 		fwrite(&in,sizeof(in),1,fd);
 		off1++;
+		fseek(fd,(off1)*s.BS,0);
 	}
 	fclose(fd);
-	check();
+	//check();
 	updateSuper(off1,off);
 	check();
-	return off1;
+	//check();
 }
 
 void updateSuper(int num,int num2){
 	FILE *fd;
 	//cout<<num<<num2<<endl;
 	fd=fopen("DISK","rb");
-	char ch[256];
+	char ch[256]="\0";
 	fread(ch,128,1,fd);
-	SuperBlock *s;
-	s=(SuperBlock *) ch;
+	SuperBlock s;
+	memcpy(&s,&ch,sizeof(SuperBlock));
 	//if(num!=-1){
-		s->freeB=s->freeB-num;
-		s->off=num;
+		s.freeB=s.freeB-num;
+		s.off=num;
 	//}
 	//if(num2!=-1){
-		s->freeBA=num2;
-		s->inode=s->off-256;
+		s.freeBA=num2;
+		s.inode=s.off-256;
 	//}
 	fclose(fd);
-	fd=fopen("DISK","wb");
+	fd=fopen("DISK","rb+");
 	fwrite(&s, sizeof(s),1,fd);
 	fclose(fd);
 
@@ -138,11 +145,14 @@ void updateSuper(int num,int num2){
 void check(){
 	FILE *fd;
 	fd=fopen("DISK","rb");
-	char ch[256];
+	char ch[256]="\0";
 	fread(ch,128,1,fd);
-	SuperBlock *s;
-	s=(SuperBlock *) ch;
-	cout<<s->freeB<<endl;
-	cout<<s->off<<endl;
-	cout<<s->inode<<endl;
+	fclose(fd);
+	SuperBlock s;	
+	memcpy(&s,&ch,sizeof(SuperBlock));
+	cout<<s.freeB<<endl;
+	cout<<s.off<<endl;
+	cout<<s.inode<<endl;
+	cout<<s.freeBA<<endl;
+	//fclose(fd);
 }
