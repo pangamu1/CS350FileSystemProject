@@ -11,13 +11,15 @@
 class ssfs{
 public:
 	ssfs(std::vector<std::string> args, int file_size, int block_size, int direct_blocks);
-	void create(std::vector<std::string> args);
+	map <string, int> inodeMap;
+	map <string, int>::iterator it;
+	void create(std::vector<std::string> args,SuperBlock sb);
 	void import(std::vector<std::string> args);
 	void cat(std::vector<std::string> args);
 	void del(std::vector<std::string> args);
-	void wrtie(std::vector<std::string> args);
+	void write(std::vector<std::string> args);
 	void read(std::vector<std::string> args);
-	void list();
+	void list(SuperBlock sb);
 	void shut_down(std::vector<std::string> args);
 	bool inArr[256];
 	//std::map <std::string, int> inodeMap;
