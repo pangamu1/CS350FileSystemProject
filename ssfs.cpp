@@ -51,14 +51,93 @@ void ssfs::list(SuperBlock sb){
 	cout << "hello" << endl;
 }
 
-void write(std::vector<std::string> args){
-	string filename=argv[1];
-	char c=argv[2];
-	int start=atoi(argv[3]);
-	int num=atoi(argv[4]);
-	
 
+//DID not account for indirect and double indirect pointers yet
+void ssfs::read(vector<string> args, SuperBlock sb){
+	cout << "READ FUNCTION" << endl;	
+	//Get arguments
+	string filename = args[1];
+	int start_byte = atoi(args[2].c_str());
+	int num_bytes = atoi(args[3].c_str());
+	int inode_pos = inodeMap[filename];
+	//cout << filename << "\t" << start_byte << "\t" << num_bytes << "\t" << inode_pos << endl;
+	//open file
+	FILE*fp = fopen("DISK", "rb+");
+	//seek to where inode is, inode pos from inode map	
+	fseek(fp,sb.BS*(inode_pos+sb.inode),0);
+	//buffer for reading inode data	
+	char ch4[sb.BS];	
+	//read in inode data	
+	fread(ch4,sb.BS,1,fp);
+	//create new inode	
+	Inode newnode;
+	//copy data into inode variable	
+	memcpy(&newnode,&ch4,sizeof(newnode));
+	//checking if i got the inode	
+	//cout << newnode.filename << "\t" << newnode.file_size << endl;
+	//creating buffer for data block to be read into
+	char block_buff[sb.BS];
+	int start_byte = start_byte + (sb.BS*newnode.direct_pointer[0]);
+	fseek(fp,start_byte,0);
+	//iterate through inodes	
+	while(num_bytes > 0){
+		//seek to datablock, hope my math is right
+		//read block into buffer
+		if (num_bytes > sb.BS){
+			fread(block_buff,sb.BS,1,fp);
+`			
+			num_bytes -=sb.BS;
+		}
+		else{
+			fread(block_buff,num_bytes,1,fp);
+			num_bytes -= sb.BS;
+		}
+		//prints each block. one per line.
+		for (int j=0; j<sb.BS; j++){
+			cout << block_buff[j];
+		}
+		cout << endl;
+		
+	}
+}
 
+//Cat and read are pretty much the same thing rip
+//DID not account for indirect and double indirect pointers yet
+void ssfs::cat(vector<string> args, SuperBlock sb){
+	cout << "CAT FUNCTION" << endl;	
+	//Get arguments
+	string filename = args[1];
+	int inode_pos = inodeMap[filename];
+	//open file
+	FILE*fp = fopen("DISK", "rb+");
+	//seek to where inode is, inode pos from inode map	
+	fseek(fp,sb.BS*(inode_pos+sb.inode),0);
+	//buffer for reading inode data	
+	char ch4[sb.BS];	
+	//read in inode data	
+	fread(ch4,sb.BS,1,fp);
+	//create new inode	
+	Inode newnode;
+	//copy data into inode variable	
+	memcpy(&newnode,&ch4,sizeof(newnode));
+	//checking if i got the inode	
+	//cout << newnode.filename << "\t" << newnode.file_size << endl;
+	//creating buffer for data block to be read into
+	char block_buff[sb.BS];
+	//iterate through inodes	
+	for(int i=0; i<12; i++){
+		if (newnode.direct_pointer[i] != -1){
+			//seek to datablock, hope my math is right
+			fseek(fp,sb.BS*(newnode.direct_pointer[i]),0);
+			//read block into buffer
+			fread(block_buff,sb.BS,1,fp);
+			//prints each block. one per line.
+			for (int j=0; j<sb.BS; j++){
+				cout << block_buff[j];
+			}
+			cout << endl;
+		}
+	}
 }
 
 void ssfs::create(vector<string> args,SuperBlock sb){
@@ -94,8 +173,9 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 			}
 		}
 	}
-	char ch4[sb.BS];
+	
 	fseek(fp,sb.BS*(inode_num+sb.inode),0);
+	char ch4[sb.BS];	
 	fread(ch4,sb.BS,1,fp);
 	Inode newnode;
 	memcpy(&newnode,&ch4,sizeof(newnode));
@@ -103,8 +183,14 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 	strcpy(newnode.filename, file_name.c_str());
 	//newnode->filename=file_name;
 	newnode.file_size = 0;
+	for (int i=0; i<12; i++){
+		newnode.direct_pointer[i] = -1;
+		//cout << newnode.direct_pointer[i] << " ";
+	}
 	cout<<"Hi"<<endl;
+	
 	cout<<newnode.filename<<endl;
+	cout << newnode.file_size<< endl;
 	//set file length MAYBE
 
 	//update inode which flips bit at that index
@@ -206,7 +292,7 @@ int main(int argc, char * argv[]){
 		}
 	}
 
-	ifstream cmd_file ("input.txt");
+	ifstream cmd_file (argv[1]);
 
 	while(getline(cmd_file, cmd,'\n')){
 		args.clear();
@@ -236,11 +322,11 @@ int main(int argc, char * argv[]){
 			}
 		}
 		else if(args[0] == "CAT"){
-			//fs->cat(args);
 			if (args.size() < 2) {
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
 			}
+			fs->cat(args,s);
 		}
 		else if(args[0] == "DELETE"){
 			if (args.size() < 2) {
@@ -260,6 +346,8 @@ int main(int argc, char * argv[]){
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
 			}
+			cout << read << endl;
+			fs->read(args, s);
 		}
 		else if(args[0] == "LIST"){
 			fs->list(s);
