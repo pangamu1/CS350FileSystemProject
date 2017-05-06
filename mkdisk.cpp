@@ -91,13 +91,30 @@ void initiateDisk(int numBlocks, int blockSize, string diskFileName){
 		off=3;
 	}
 	//check();
-	bool free[numBlocks];
-	for(int i=0;i<blockSize;i++) free[i]=true;
-	for(int i=0;i<off;i++)free[i]=false;
+	bool free[blockSize];
+	int countB=off;
+	for(int i=0;i<blockSize;i++) free[i]=false;
+	int start=off+(numBlocks/blockSize)+256;
+	cout<<"START="<<start<<endl;
 	int count=0;
-	int countB=off+1;
+	if(start<blockSize){
+		for(int i=start;i<blockSize;i++) free[i]=true;
+		fwrite(&free,sizeof(free),1,fd);
+		countB++;
+	}
+	while(start>blockSize){
+		fwrite(&free,sizeof(free),1,fd);
+		countB++;
+		start-=blockSize;
+		cout<<"START="<<start<<endl;
+		count+=blockSize;
+	}
+	for(int i=start;i<blockSize;i++)free[i]=true;
 	fwrite(&free,sizeof(free),1,fd);
-	fseek(fd,countB*s.BS,0);
+	countB++;
+	count+=blockSize;
+	//fseek(fd,countB*s.BS,0);
+	
 	for(int i=0;i<blockSize;i++) free[i]=true;
 	while(count<numBlocks){
 		fwrite(&free,sizeof(free),1,fd);
@@ -115,6 +132,7 @@ void initiateDisk(int numBlocks, int blockSize, string diskFileName){
 	}
 	fclose(fd);
 	//check();
+	cout<<"OFF1: "<<off1<<endl;
 	updateSuper(off1,off);
 	check();
 	//check();
@@ -130,6 +148,7 @@ void updateSuper(int num,int num2){
 	memcpy(&s,&ch,sizeof(SuperBlock));
 	//if(num!=-1){
 		s.freeB=s.freeB-num;
+		cout<<"Free B :"<<s.freeB<<endl;
 		s.off=num;
 	//}
 	//if(num2!=-1){

@@ -51,8 +51,6 @@ void ssfs::list(SuperBlock sb){
 	cout << "hello" << endl;
 }
 
-
-//DID not account for indirect and double indirect pointers yet
 void ssfs::read(vector<string> args, SuperBlock sb){
 	cout << "READ FUNCTION" << endl;	
 	//Get arguments
@@ -77,28 +75,35 @@ void ssfs::read(vector<string> args, SuperBlock sb){
 	//cout << newnode.filename << "\t" << newnode.file_size << endl;
 	//creating buffer for data block to be read into
 	char block_buff[sb.BS];
-	int start_byte = start_byte + (sb.BS*newnode.direct_pointer[0]);
+	start_byte = start_byte + (sb.BS*newnode.direct_pointer[0]);
 	fseek(fp,start_byte,0);
 	//iterate through inodes	
 	while(num_bytes > 0){
 		//seek to datablock, hope my math is right
 		//read block into buffer
 		if (num_bytes > sb.BS){
-			fread(block_buff,sb.BS,1,fp);
-`			
+			fread(block_buff,sb.BS,1,fp);			
+			
+			for (int j=0; j<sb.BS; j++){
+				cout << block_buff[j];
+			}
+			cout << endl;
 			num_bytes -=sb.BS;
 		}
 		else{
 			fread(block_buff,num_bytes,1,fp);
+			//cout<<num_bytes<<endl;
+			for (int j=0; j<num_bytes; j++){
+				cout << block_buff[j];
+			}
+			cout << endl;
 			num_bytes -= sb.BS;
 		}
 		//prints each block. one per line.
-		for (int j=0; j<sb.BS; j++){
-			cout << block_buff[j];
-		}
-		cout << endl;
+		
 		
 	}
+	fclose(fp);
 }
 
 //Cat and read are pretty much the same thing rip
@@ -138,12 +143,242 @@ void ssfs::cat(vector<string> args, SuperBlock sb){
 			cout << endl;
 		}
 	}
+	fclose(fp);
 }
+
+void ssfs::del(vector <string> args, SuperBlock sb) {
+	string file_name = args[1];
+	//char ch[sb.BS] = "\0";
+	FILE *fp;
+	fp = fopen("DISK", "rb+");
+	Inode tempinode;
+	fseek(fp, sb.BS, SEEK_SET);
+	int i = 0;
+	char ch[sb.BS];
+	for (i; i < 256; i++) {
+		fseek(fp, sb.BS*(i+sb.inode), 0);
+		fread(ch, sb.BS, 1, fp);
+		memcpy(&tempinode, &ch, sizeof(tempinode));
+		if (strcmp(file_name.c_str(), tempinode.filename) == 0) {
+			inArr[i] = true;
+			inodeMap.erase(file_name);
+			break;
+		}
+	}
+	fseek(fp,sb.BS*(i+sb.inode),0);
+	fread(ch,sb.BS,1,fp);
+	Inode blanknode;
+	memcpy(&blanknode,&ch,sizeof(blanknode));
+	//memset(newnode,-1, sizeof(Inode));
+	strcpy(blanknode.filename, "                    ");
+	//cout << blanknode.filename << endl;
+	blanknode.file_size = 0;
+	char cha='\0';
+	for (int j=0;j<12;j++){
+		if(blanknode.direct_pointer[j]!=-1){
+			fseek(fp,sb.BS*blanknode.direct_pointer[j],0);
+			for(int z=0;z<sb.BS;z++){
+				fwrite(&cha,1,1,fp);
+			}
+			blanknode.direct_pointer[j]=-1;
+		}
+	}
+	fseek(fp,sb.BS*(i+sb.inode),0);
+	fwrite(&blanknode,sb.BS,1,fp);
+	//cout<<"Hi"<<endl;
+	//cout<<newnode.filename<<endl;
+	//set file length MAYBE
+
+	//update inode which flips bit at that index
+
+	//fseek(fp, sb.off +inode_num *sb.BS, SEEK_SET);
+	fclose(fp);
+}
+
+void ssfs::write(std::vector<std::string> args,SuperBlock sb,bool *freeB){
+	FILE *fp;
+	Inode in1;
+	char ch[sb.BS];
+	string filename=args[1];
+	char c=args[2][0];
+	int start=atoi(args[3].c_str());
+	int num=atoi(args[4].c_str());
+	int in;
+	it=inodeMap.find(filename);
+	cout<<inodeMap[filename]<<endl;
+	//cout<<inodeMap.end()<<endl;
+	if(inodeMap.find(filename)!=inodeMap.end()){
+		in =inodeMap[filename];
+	}else{
+		perror("Filename does not exist");
+		exit(0);
+	}
+	fp=fopen("DISK","rb+");
+	fseek(fp,sb.BS*(sb.inode+in),0);
+	fread(ch,sb.BS,1,fp);
+	memcpy(&in1,&ch,sizeof(in1));
+	//cout<<"HI"<<endl;
+	cout<<in1.filename<<endl;
+	if(start>in1.file_size){
+		perror("Start Byte is too big");
+		exit(0);
+	}
+	int directS=start/sb.BS;
+	int directE=(start+num)/sb.BS;
+	int numb=num;
+	int start2;
+	if(in1.file_size==0){
+		if(directE<12){
+			for(int i=0;i<=directE;i++){
+				for(int x=0;x<sb.numB;x++){
+					if(freeB[x]==true){
+						freeB[x]=false;
+						//cout<<"X="<<x<<endl;
+						fseek(fp,sb.BS*(x),0);
+						in1.direct_pointer[i]=x;
+						x=sb.numB;
+						if(numb>sb.BS){
+							//cout<<"WRITING HERE"<<endl;
+							for(int y=0;y<sb.BS;y++){
+								fwrite(&c,sizeof(c),1,fp);
+							}
+						numb-=sb.BS;
+							
+						}
+						else{
+							//cout<<"WRITING HERE 2 "<<c<<" num :"<<numb<<endl;
+							for(int y=0;y<numb;y++){
+								fwrite(&c,sizeof(c),1,fp);
+							}
+						}
+
+					}
+				}
+
+			}
+
+		}
+	}
+	else if(in1.direct_pointer[directE]!=-1){
+		for(int x=directS;x<=directE;x++){
+			if(x==directS){
+				//fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
+				cout<<"HI"<<endl;
+				start2=start%sb.BS;
+				fseek(fp,start2+sb.BS*(in1.direct_pointer[x]),0);
+				if(numb>=sb.BS-start2){
+					for(int y=0;y<sb.BS-start2;y++){
+						fwrite(&c,1,1,fp);
+					}
+					numb-=(sb.BS-start2);
+					}
+				else{
+					for(int y=0;y<numb;y++){
+						fwrite(&c,1,1,fp);
+					}
+				}
+				
+			}else{
+				fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
+				if(numb>=sb.BS){
+					for(int y=0;y<sb.BS;y++){
+						fwrite(&c,1,1,fp);
+					}
+					numb-=sb.BS;
+					}
+				else{
+					for(int y=0;y<numb;y++){
+						fwrite(&c,1,1,fp);
+					}
+				}
+			}
+			
+		}
+	}
+	else{
+		for(int x=directS;x<=directE;x++){
+			if(in1.direct_pointer[x]!=-1&&x==directS){
+				//fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
+				start2=start%sb.BS;
+				fseek(fp,start2+sb.BS*(in1.direct_pointer[x]),0);
+				if(numb>=sb.BS-start2){
+					for(int y=0;y<sb.BS-start2;y++){
+						fwrite(&c,1,1,fp);
+					}
+					numb-=(sb.BS-start2);
+					}
+				else{
+					for(int y=0;y<numb;y++){
+						fwrite(&c,1,1,fp);
+					}
+				}
+
+			}
+			else if(in1.direct_pointer[x]!=-1){
+				fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
+				if(numb>=sb.BS){
+					for(int y=0;y<sb.BS;y++){
+						fwrite(&c,1,1,fp);
+					}
+					numb-=sb.BS;
+					}
+				else{
+					for(int y=0;y<numb;y++){
+						fwrite(&c,1,1,fp);
+					}
+				}
+			}
+			else{
+				for(int i=0;i<sb.numB;i++){
+					if(freeB[i]==true){
+						freeB[i]=false;
+						fseek(fp,sb.BS*(i),0);
+						in1.direct_pointer[x]=i;
+						i=sb.numB;
+						if(numb>sb.BS){
+							for(int y=0;y<sb.BS;y++){
+								fwrite(&c,1,1,fp);
+							}
+							numb-=sb.BS;
+						}
+						else{
+							for(int y=0;y<numb;y++){
+								fwrite(&c,1,numb,fp);
+							}
+						}
+
+					}
+				}
+				}
+
+			}
+		}
+		in1.file_size=num;
+		//cout<<in1.direct_pointer[0]<<endl;
+		fseek(fp,in1.direct_pointer[0]*(sb.BS),0);
+		char ch1;
+		//for(int i=0;i<100;i++){
+		//fread(&ch1,1,1,fp);
+		//cout<<ch1<<endl;
+		//}
+		//string s;
+		//s=ch1;
+		//memcpy(&s,&ch,sizeof(ch));
+		//cout<<s<<endl;
+		fseek(fp,sb.BS*(sb.inode+in),0);
+		fwrite(&in1,sizeof(in1),1,fp);
+		fclose(fp);
+		//return freeB;
+	}
+	
+
+
 
 void ssfs::create(vector<string> args,SuperBlock sb){
 	//do global checks
 	//buffer *buf;
 	//SuperBlock sb;
+	char ch[sb.BS];
 	string file_name = args[1];
 	int inode_num;
 	Inode tempinode;
@@ -156,26 +391,32 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 	//tempinode = buf;
 	//iterate through inode map to see if there is a file
 	for(int i =0; i <256; i++){
-		if(strcmp(file_name.c_str(), tempinode.filename) == 0){
-			cerr << "not a unique file" << endl;
+		if(inArr[i]==false){
+			fseek(fp,sb.BS*(i+sb.inode),0);
+			fread(ch,sb.BS,1,fp);
+			memcpy(&tempinode,&ch,sizeof(tempinode));
+		
+			if(strcmp(file_name.c_str(), tempinode.filename) == 0){
+				cerr << "not a unique file" << endl;
+				exit(0);
+			}
 		}
-		else{
+	}
+		for(int i =0; i <256; i++){
 				//find empty inode
 			if(inArr[i] == true){
 				inode_num = i;
 				inArr[i] = false;
 				//it=inodeMap.find(i);
 				//inodeMap.erase(inodeMap.find(i));
-				inodeMap[tempinode.filename]=i;
+				inodeMap[file_name]=i;
 				//sb.inode++;
 				//fseek(file_name,(s->BS)*(s->offset+i), 0);
 				break;
 			}
 		}
-	}
-	
+	char ch4[sb.BS];
 	fseek(fp,sb.BS*(inode_num+sb.inode),0);
-	char ch4[sb.BS];	
 	fread(ch4,sb.BS,1,fp);
 	Inode newnode;
 	memcpy(&newnode,&ch4,sizeof(newnode));
@@ -188,9 +429,7 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 		//cout << newnode.direct_pointer[i] << " ";
 	}
 	cout<<"Hi"<<endl;
-	
 	cout<<newnode.filename<<endl;
-	cout << newnode.file_size<< endl;
 	//set file length MAYBE
 
 	//update inode which flips bit at that index
@@ -246,7 +485,7 @@ int main(int argc, char * argv[]){
 	//cout<<s.BS<<endl;
 	bool temp[128];
 	bool temp2[128];
-	bool freeB[s.numB];
+	bool *freeB=new bool[s.numB];
 	cout<<s.BS<<endl;
 	if(s.BS<256){
 		fread(ch1,s.BS,1,fd);
@@ -267,6 +506,7 @@ int main(int argc, char * argv[]){
 	fseek(fd,((s.BS)*(s.freeBA)),0);
 	int count=0;
 	int countB=s.freeBA;
+	cout<<"Free BA:"<<s.freeBA<<endl;
 	bool temp3[s.BS];
 	while(count<s.numB){
 		fread(ch1,s.BS,1,fd);
@@ -278,7 +518,7 @@ int main(int argc, char * argv[]){
 		countB++;
 		fseek(fd,(s.BS)*countB,0);
 	}
-	cout<<freeB[0]<<endl;
+	cout<<freeB[136]<<endl;
 	
 	char in[s.BS];
 	for(int i=0;i<256;i++){
@@ -292,13 +532,13 @@ int main(int argc, char * argv[]){
 		}
 	}
 
-	ifstream cmd_file (argv[1]);
+	ifstream cmd_file ("input.txt");
 
 	while(getline(cmd_file, cmd,'\n')){
 		args.clear();
 		istringstream ss(cmd);
 		while(ss >> token){
-			cout << "sh> ";
+			//cout << "sh> ";
 			args.push_back(token);
 		}
 		//args.push_back(cmd);
@@ -322,6 +562,7 @@ int main(int argc, char * argv[]){
 			}
 		}
 		else if(args[0] == "CAT"){
+			//fs->cat(args);
 			if (args.size() < 2) {
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
@@ -333,20 +574,20 @@ int main(int argc, char * argv[]){
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
 			}
-			
+			fs->del(args,s);
 		}
 		else if(args[0] == "WRITE"){
 			if (args.size() < 5) {
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
 			}
+			else fs->write(args,s,freeB);
 		}
 		else if(args[0] == "READ"){
 			if (args.size() < 4) {
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
 			}
-			cout << read << endl;
 			fs->read(args, s);
 		}
 		else if(args[0] == "LIST"){
