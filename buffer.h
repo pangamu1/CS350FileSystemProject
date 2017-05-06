@@ -1,5 +1,6 @@
 #include <string>
 
+using namespace std;
 
 struct buffer{
 	int cmd;
@@ -9,4 +10,3 @@ struct buffer{
 	int start_byte;
 	int num_bytes;
 };
-
