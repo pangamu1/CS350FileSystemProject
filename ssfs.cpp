@@ -60,7 +60,8 @@ void ssfs::read(vector<string> args, SuperBlock sb){
 	int inode_pos = inodeMap[filename];
 	//cout << filename << "\t" << start_byte << "\t" << num_bytes << "\t" << inode_pos << endl;
 	//open file
-	FILE*fp = fopen("DISK", "rb+");
+	FILE *fp;
+	fp = fopen("DISK", "rb+");
 	//seek to where inode is, inode pos from inode map	
 	fseek(fp,sb.BS*(inode_pos+sb.inode),0);
 	//buffer for reading inode data	
@@ -75,30 +76,60 @@ void ssfs::read(vector<string> args, SuperBlock sb){
 	//cout << newnode.filename << "\t" << newnode.file_size << endl;
 	//creating buffer for data block to be read into
 	char block_buff[sb.BS];
-	start_byte = start_byte + (sb.BS*newnode.direct_pointer[0]);
-	fseek(fp,start_byte,0);
+	int indir[sb.BS/4];
+	int startI=start_byte%sb.BS;
+	int startB=start_byte / sb.BS;
+	int endB=(start_byte+num_bytes)/sb.BS;
+	int tempNum=num_bytes;
+	int arr[endB-startB+1];
+	//cout<<num_bytes/sb.BS<<endl;
+	cout<<endB<<" "<<startB<<endl;
+	//start_byte = startB + (sb.BS*newnode.direct_pointer[startI]);
+	//fseek(fp,start_byte,0);
+	int count=0;
+	for(int i=startB;i<12;i++){
+		arr[count]=newnode.direct_pointer[i];
+		count++;
+	}
+	if(newnode.indirect!=-1){
+		//cout<<"IND "<<newnode.indirect<<endl;
+		fseek(fp,sb.BS*newnode.indirect,0);
+		fread(block_buff,sb.BS,1,fp);
+		memcpy(&indir,&block_buff,sizeof(indir));
+		//cout<<indir[0]<<endl;
+		int count2=0;
+		for(int i=count;i<(endB-startB+1);i++){
+			arr[count]=indir[count2];
+			count++;
+			count2++;
+		}
+	}
 	//iterate through inodes	
-	while(num_bytes > 0){
+	for(int i=0;i<endB-startB;i++){
 		//seek to datablock, hope my math is right
 		//read block into buffer
-		if (num_bytes > sb.BS){
-			fread(block_buff,sb.BS,1,fp);			
+		fseek(fp,(startI+(sb.BS*(arr[i]))),0);
+		//cout<<<<endl;
+		if (tempNum > sb.BS){
+			fread(block_buff,sb.BS-startI,1,fp);			
 			
 			for (int j=0; j<sb.BS; j++){
 				cout << block_buff[j];
 			}
 			cout << endl;
-			num_bytes -=sb.BS;
+			tempNum -=(sb.BS-startB);
 		}
 		else{
-			fread(block_buff,num_bytes,1,fp);
+			fread(block_buff,tempNum,1,fp);
 			//cout<<num_bytes<<endl;
-			for (int j=0; j<num_bytes; j++){
+			for (int j=0; j<tempNum; j++){
 				cout << block_buff[j];
 			}
 			cout << endl;
-			num_bytes -= sb.BS;
+			tempNum -= sb.BS;
 		}
+		//cout<<"WHY"<<endl;
+		startI=0;
 		//prints each block. one per line.
 		
 		
@@ -129,6 +160,7 @@ void ssfs::cat(vector<string> args, SuperBlock sb){
 	//cout << newnode.filename << "\t" << newnode.file_size << endl;
 	//creating buffer for data block to be read into
 	char block_buff[sb.BS];
+	int indir[sb.BS/4];
 	//iterate through inodes	
 	for(int i=0; i<12; i++){
 		if (newnode.direct_pointer[i] != -1){
@@ -142,6 +174,22 @@ void ssfs::cat(vector<string> args, SuperBlock sb){
 			}
 			cout << endl;
 		}
+	}
+	if(newnode.indirect!=-1){
+		fseek(fp,sb.BS*newnode.indirect,0);
+		fread(block_buff,sb.BS,1,fp);
+		memcpy(&indir,&block_buff,sizeof(indir));
+		//cout<<indir[0]<<endl;
+		int num=newnode.file_size/sb.BS-12;
+		for(int i=0;i<num;i++){
+			fseek(fp,sb.BS*indir[i],0);
+			fread(block_buff,sb.BS,1,fp);
+			for (int j=0; j<sb.BS; j++){
+				cout << block_buff[j];
+			}
+			cout<<endl;
+		}
+		
 	}
 	fclose(fp);
 }
@@ -277,19 +325,130 @@ void ssfs::write(std::vector<std::string> args,SuperBlock sb,bool *freeB){
 		perror("Start Byte is too big");
 		exit(0);
 	}
+	//cout<<"indirect"<<in1.indirect<<endl;
+	int indir[sb.BS/4];
 	int directS=start/sb.BS;
 	int directE=(start+num)/sb.BS;
 	int numb=num;
 	int start2;
-	int blocks[directE-directS];
+	int blocks[(directE-directS)+1];
 	int bc=0;
 	if(directE>=12){
 		for (int i=directS;i<12;i++){
-			blocks[bc]=in1.direct_pointer[i]
+			if(in1.direct_pointer[i]==-1){
+					for(int x=0;x<sb.numB;x++){
+						if(freeB[x]==true){
+							freeB[x]=false;
+							sb.freeB--;
+							//cout<<"X="<<x<<endl;
+							//fseek(fp,sb.BS*(x),0);
+							in1.direct_pointer[i]=x;
+							x=sb.numB;
+					}
+				}
+			}
+			blocks[bc]=in1.direct_pointer[i];
+			bc++;
+		}
+		if(in1.indirect==0){
+			for(int x=0;x<sb.numB;x++){
+				if(freeB[x]==true){
+					freeB[x]=false;
+					sb.freeB--;
+					//cout<<"X="<<x<<endl;
+					//fseek(fp,sb.BS*(x),0);
+					in1.indirect=x;
+					x=sb.numB;
+				}
+			//cout<<"Indirect1 :"<<in1.indirect<<endl;
+			}
+		
+			int bc2=0;
+			for(int i=12;i<=directE;i++){
+				for(int x=0;x<sb.numB;x++){
+					if(freeB[x]==true){
+						freeB[x]=false;
+						indir[bc2]=x;
+						blocks[bc]=x;
+						bc++;
+						bc2++;
+						x=sb.numB;
+						}
+				}
+			}
+		}else{
+			char temp[sb.BS];
+			//int indi[directE-12];
+			//cout<<"HERE: "<<in1.indirect<<endl;
+			fseek(fp,sb.BS*(in1.indirect),0);
+			fread(temp,sizeof(temp),1,fp);
+			memcpy(&indir,&temp,sizeof(indir));
+			for(int i=0;i<(sb.BS/4);i++){
+				if(indir[i]!=0){
+					blocks[bc]=indir[i];
+					bc++;
+				}
+			}
+			for(int i=bc;i<=(directE-directS);i++){
+				for(int x=0;x<sb.numB;x++){
+					if(freeB[x]==true){
+						freeB[x]=false;
+						blocks[bc]=x;
+						indir[bc-12]=x;
+						bc++;
+						//bc2++;
+						x=sb.numB;
+						}
+				}
+
+			}
+
+		}
+		//cout<<"HERE: "<<in1.indirect<<endl;
+		fseek(fp,sb.BS*(in1.indirect),0);
+		//cout<<"Ind: "<<in1.indirect<<endl;
+		//cout<<"HELLO: "<<indir[5]<<endl;
+		fwrite(&indir,sizeof(indir),1,fp);
+		for(int i=0;i<=(directE-directS);i++){
+			if(i==0){
+				start2=start%sb.BS;
+				fseek(fp,(start2+sb.BS*(blocks[i])),0);
+				if(numb>=sb.BS-start2){
+						//sb.freeB--;
+						for(int y=0;y<sb.BS-start2;y++){
+							fwrite(&c,1,1,fp);
+						}
+						numb-=(sb.BS-start2);
+						}
+				else{
+					//sb.freeB--;
+					for(int y=0;y<numb;y++){
+						fwrite(&c,1,1,fp);
+					}
+				}
+				
+			}
+			else{
+					fseek(fp,sb.BS*(blocks[i]),0);
+					if(numb>=sb.BS){
+						//sb.freeB--;
+						for(int y=0;y<sb.BS;y++){
+							fwrite(&c,1,1,fp);
+						}
+						numb-=sb.BS;
+						}
+					else{
+						//sb.freeB--;
+						for(int y=0;y<numb;y++){
+							fwrite(&c,1,1,fp);
+						}
+					}
+				}
+			
 		}
 
 	}
-		if(in1.file_size==0){
+		else if(in1.file_size==0){
 		
 				for(int i=0;i<=directE;i++){
 					for(int x=0;x<sb.numB;x++){
@@ -441,6 +600,7 @@ void ssfs::write(std::vector<std::string> args,SuperBlock sb,bool *freeB){
 		//s=ch1;
 		//memcpy(&s,&ch,sizeof(ch));
 		//cout<<s<<endl;
+		//cout<<"Indirect2: "<<in1.indirect<<endl;
 		fseek(fp,sb.BS*(sb.inode+in),0);
 		fwrite(&in1,sizeof(in1),1,fp);
 		fseek(fp,0,0);
@@ -523,7 +683,7 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 	char ch2[sb.BS];
 	fread(ch2, sb.BS, 1, fp);
 	memcpy(&ret,&ch2,sizeof(ret));
-	cout << ret.filename << endl;
+	//cout << ret.filename << endl;
 	//cout << newnode->filename <<endl;
 	//cout << fread(newnode,sizeof(Inode),1,fp) <<endl;
 	fseek(fp,0,0);
