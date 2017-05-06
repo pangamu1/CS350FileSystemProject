@@ -48,7 +48,7 @@ void ssfs::list(SuperBlock sb){
 			
 		}
 	}
-	cout << "hello" << endl;
+	//cout << "hello" << endl;
 }
 
 void ssfs::read(vector<string> args, SuperBlock sb){
@@ -146,7 +146,7 @@ void ssfs::cat(vector<string> args, SuperBlock sb){
 	fclose(fp);
 }
 
-void ssfs::del(vector <string> args, SuperBlock sb) {
+void ssfs::del(vector <string> args, SuperBlock sb,bool *freeB) {
 	string file_name = args[1];
 	//char ch[sb.BS] = "\0";
 	FILE *fp;
@@ -162,6 +162,7 @@ void ssfs::del(vector <string> args, SuperBlock sb) {
 		if (strcmp(file_name.c_str(), tempinode.filename) == 0) {
 			inArr[i] = true;
 			inodeMap.erase(file_name);
+			sb.freeIn++;
 			break;
 		}
 	}
@@ -176,6 +177,8 @@ void ssfs::del(vector <string> args, SuperBlock sb) {
 	char cha='\0';
 	for (int j=0;j<12;j++){
 		if(blanknode.direct_pointer[j]!=-1){
+			freeB[blanknode.direct_pointer[j]]=true;
+			sb.freeB++;
 			fseek(fp,sb.BS*blanknode.direct_pointer[j],0);
 			for(int z=0;z<sb.BS;z++){
 				fwrite(&cha,1,1,fp);
@@ -192,7 +195,58 @@ void ssfs::del(vector <string> args, SuperBlock sb) {
 	//update inode which flips bit at that index
 
 	//fseek(fp, sb.off +inode_num *sb.BS, SEEK_SET);
+	fseek(fp,0,0);
+	fwrite(&sb,sizeof(sb),1,fp);
 	fclose(fp);
+}
+
+void ssfs::import(vector<string> args, SuperBlock sb, bool *freeB){
+	//it = inodeMap.find(ssfs_filename);
+	int inode_pos;
+	string ssfs_filename = args[1];
+	string unix_filename = args[2];
+	bool file_not_exist = false;
+	if (inodeMap.find(ssfs_filename) != inodeMap.end()){
+		inode_pos = inodeMap[ssfs_filename];
+	}
+	else{
+		vector<string> create_args(2);
+		create_args[0] = "CREATE";
+		create_args[1] = unix_filename;
+		cout << "FILE DOES NOT EXIST. CREATING NEW FILE" << unix_filename << endl;
+		create(create_args, sb);
+	}
+	/*FILE*fp = fopen("DISK", "rb+");
+	//seek to where inode is, inode pos from inode map	
+	fseek(fp,sb.BS*(inode_pos+sb.inode),0);
+	char ch4[sb.BS];	
+	//read in inode data	
+	fread(ch4,sb.BS,1,fp);
+	//create new inode	
+	Inode newnode;
+	//copy data into inode variable	
+	memcpy(&newnode,&ch4,sizeof(newnode));
+	*/
+	//Opening file stream and setting up write args
+	ifstream unix_fs(unix_filename);
+	string line;
+	vector<string> write_args(5);
+	write_args[0] = "WRITE";
+	if (file_not_exist) write_args[1] = (unix_filename); 
+	else write_args[1] = (ssfs_filename);
+	int counter = 0;
+	while(getline(unix_fs, line)){
+		for(int i=0; i<line.length(); i++){
+			write_args[2] = line[i];
+			
+			write_args[3] = to_string(counter);
+			counter++;
+			write_args[4] ="1";
+			//cout<<write_args[1]<<write_args[2]<<write_args[3]<<write_args[4]<<endl;
+			write(write_args, sb, freeB);
+		}
+	}
+
 }
 
 void ssfs::write(std::vector<std::string> args,SuperBlock sb,bool *freeB){
@@ -205,7 +259,7 @@ void ssfs::write(std::vector<std::string> args,SuperBlock sb,bool *freeB){
 	int num=atoi(args[4].c_str());
 	int in;
 	it=inodeMap.find(filename);
-	cout<<inodeMap[filename]<<endl;
+	//cout<<inodeMap[filename]<<endl;
 	//cout<<inodeMap.end()<<endl;
 	if(inodeMap.find(filename)!=inodeMap.end()){
 		in =inodeMap[filename];
@@ -218,7 +272,7 @@ void ssfs::write(std::vector<std::string> args,SuperBlock sb,bool *freeB){
 	fread(ch,sb.BS,1,fp);
 	memcpy(&in1,&ch,sizeof(in1));
 	//cout<<"HI"<<endl;
-	cout<<in1.filename<<endl;
+	//cout<<in1.filename<<endl;
 	if(start>in1.file_size){
 		perror("Start Byte is too big");
 		exit(0);
@@ -227,133 +281,155 @@ void ssfs::write(std::vector<std::string> args,SuperBlock sb,bool *freeB){
 	int directE=(start+num)/sb.BS;
 	int numb=num;
 	int start2;
-	if(in1.file_size==0){
-		if(directE<12){
-			for(int i=0;i<=directE;i++){
-				for(int x=0;x<sb.numB;x++){
-					if(freeB[x]==true){
-						freeB[x]=false;
-						//cout<<"X="<<x<<endl;
-						fseek(fp,sb.BS*(x),0);
-						in1.direct_pointer[i]=x;
-						x=sb.numB;
-						if(numb>sb.BS){
-							//cout<<"WRITING HERE"<<endl;
-							for(int y=0;y<sb.BS;y++){
-								fwrite(&c,sizeof(c),1,fp);
-							}
-						numb-=sb.BS;
-							
-						}
-						else{
-							//cout<<"WRITING HERE 2 "<<c<<" num :"<<numb<<endl;
-							for(int y=0;y<numb;y++){
-								fwrite(&c,sizeof(c),1,fp);
-							}
-						}
-
-					}
-				}
-
-			}
-
+	int blocks[directE-directS];
+	int bc=0;
+	if(directE>=12){
+		for (int i=directS;i<12;i++){
+			blocks[bc]=in1.direct_pointer[i]
 		}
-	}
-	else if(in1.direct_pointer[directE]!=-1){
-		for(int x=directS;x<=directE;x++){
-			if(x==directS){
-				//fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
-				cout<<"HI"<<endl;
-				start2=start%sb.BS;
-				fseek(fp,start2+sb.BS*(in1.direct_pointer[x]),0);
-				if(numb>=sb.BS-start2){
-					for(int y=0;y<sb.BS-start2;y++){
-						fwrite(&c,1,1,fp);
-					}
-					numb-=(sb.BS-start2);
-					}
-				else{
-					for(int y=0;y<numb;y++){
-						fwrite(&c,1,1,fp);
-					}
-				}
-				
-			}else{
-				fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
-				if(numb>=sb.BS){
-					for(int y=0;y<sb.BS;y++){
-						fwrite(&c,1,1,fp);
-					}
-					numb-=sb.BS;
-					}
-				else{
-					for(int y=0;y<numb;y++){
-						fwrite(&c,1,1,fp);
-					}
-				}
-			}
-			
-		}
-	}
-	else{
-		for(int x=directS;x<=directE;x++){
-			if(in1.direct_pointer[x]!=-1&&x==directS){
-				//fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
-				start2=start%sb.BS;
-				fseek(fp,start2+sb.BS*(in1.direct_pointer[x]),0);
-				if(numb>=sb.BS-start2){
-					for(int y=0;y<sb.BS-start2;y++){
-						fwrite(&c,1,1,fp);
-					}
-					numb-=(sb.BS-start2);
-					}
-				else{
-					for(int y=0;y<numb;y++){
-						fwrite(&c,1,1,fp);
-					}
-				}
 
-			}
-			else if(in1.direct_pointer[x]!=-1){
-				fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
-				if(numb>=sb.BS){
-					for(int y=0;y<sb.BS;y++){
-						fwrite(&c,1,1,fp);
-					}
-					numb-=sb.BS;
-					}
-				else{
-					for(int y=0;y<numb;y++){
-						fwrite(&c,1,1,fp);
-					}
-				}
-			}
-			else{
-				for(int i=0;i<sb.numB;i++){
-					if(freeB[i]==true){
-						freeB[i]=false;
-						fseek(fp,sb.BS*(i),0);
-						in1.direct_pointer[x]=i;
-						i=sb.numB;
-						if(numb>sb.BS){
-							for(int y=0;y<sb.BS;y++){
-								fwrite(&c,1,1,fp);
-							}
+	}
+		if(in1.file_size==0){
+		
+				for(int i=0;i<=directE;i++){
+					for(int x=0;x<sb.numB;x++){
+						if(freeB[x]==true){
+							freeB[x]=false;
+							//cout<<"X="<<x<<endl;
+							fseek(fp,sb.BS*(x),0);
+							in1.direct_pointer[i]=x;
+							x=sb.numB;
+							if(numb>sb.BS){
+								sb.freeB--;
+								//cout<<"WRITING HERE"<<endl;
+								for(int y=0;y<sb.BS;y++){
+									fwrite(&c,sizeof(c),1,fp);
+								}
 							numb-=sb.BS;
-						}
-						else{
-							for(int y=0;y<numb;y++){
-								fwrite(&c,1,numb,fp);
+							
 							}
-						}
+							else{
+								//cout<<"WRITING HERE 2 "<<c<<" num :"<<numb<<endl;			
+								sb.freeB--;
+								for(int y=0;y<numb;y++){
+									fwrite(&c,sizeof(c),1,fp);
+								}
+							}
 
+						}
 					}
-				}
+
 				}
 
 			}
+		else if(in1.direct_pointer[directE]!=-1){
+			for(int x=directS;x<=directE;x++){
+				if(x==directS){
+					//fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
+					//cout<<"HI"<<endl;
+					start2=start%sb.BS;
+					fseek(fp,start2+sb.BS*(in1.direct_pointer[x]),0);
+					if(numb>=sb.BS-start2){
+						//sb.freeB--;
+						for(int y=0;y<sb.BS-start2;y++){
+							fwrite(&c,1,1,fp);
+						}
+						numb-=(sb.BS-start2);
+						}
+					else{
+						//sb.freeB--;
+						for(int y=0;y<numb;y++){
+							fwrite(&c,1,1,fp);
+						}
+					}
+				
+				}else{
+					fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
+					if(numb>=sb.BS){
+						sb.freeB--;
+						for(int y=0;y<sb.BS;y++){
+							fwrite(&c,1,1,fp);
+						}
+						numb-=sb.BS;
+						}
+					else{
+						sb.freeB--;
+						for(int y=0;y<numb;y++){
+							fwrite(&c,1,1,fp);
+						}
+					}
+				}
+			
+			}
 		}
-		in1.file_size=num;
+		else{
+			for(int x=directS;x<=directE;x++){
+				if(in1.direct_pointer[x]!=-1&&x==directS){
+					//fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
+					start2=start%sb.BS;
+					fseek(fp,start2+(sb.BS*(in1.direct_pointer[x])),0);
+					if(numb>=sb.BS-start2){
+						//sb.freeB--;
+						for(int y=0;y<sb.BS-start2;y++){
+							fwrite(&c,1,1,fp);
+						}
+						numb-=(sb.BS-start2);
+						}
+					else{
+						//sb.freeB--;
+						for(int y=0;y<numb;y++){
+							fwrite(&c,1,1,fp);
+						}
+					}
+
+				}
+				else if(in1.direct_pointer[x]!=-1){
+					fseek(fp,sb.BS*(in1.direct_pointer[x]),0);
+					if(numb>=sb.BS){
+						//sb.freeB--;
+						for(int y=0;y<sb.BS;y++){
+							fwrite(&c,1,1,fp);
+						}
+						numb-=sb.BS;
+						}
+					else{
+						//sb.freeB--;
+						for(int y=0;y<numb;y++){
+							fwrite(&c,1,1,fp);
+						}
+					}
+				}
+				else{
+					for(int i=0;i<sb.numB;i++){
+						if(freeB[i]==true){
+							freeB[i]=false;
+							fseek(fp,sb.BS*(i),0);
+							in1.direct_pointer[x]=i;
+							i=sb.numB;
+							if(numb>sb.BS){
+								sb.freeB--;
+								for(int y=0;y<sb.BS;y++){
+									fwrite(&c,1,1,fp);
+								}
+								numb-=sb.BS;
+							}
+							else{
+								sb.freeB--;
+								for(int y=0;y<numb;y++){
+									fwrite(&c,1,numb,fp);
+								}
+							}
+
+						}
+					}
+					}
+
+				}
+			}
+		//}
+		if((start+num)>in1.file_size){
+			in1.file_size=num+start;
+		}
 		//cout<<in1.direct_pointer[0]<<endl;
 		fseek(fp,in1.direct_pointer[0]*(sb.BS),0);
 		char ch1;
@@ -367,6 +443,8 @@ void ssfs::write(std::vector<std::string> args,SuperBlock sb,bool *freeB){
 		//cout<<s<<endl;
 		fseek(fp,sb.BS*(sb.inode+in),0);
 		fwrite(&in1,sizeof(in1),1,fp);
+		fseek(fp,0,0);
+		fwrite(&sb,sizeof(sb),1,fp);
 		fclose(fp);
 		//return freeB;
 	}
@@ -410,6 +488,7 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 				//it=inodeMap.find(i);
 				//inodeMap.erase(inodeMap.find(i));
 				inodeMap[file_name]=i;
+				sb.freeIn-=1;
 				//sb.inode++;
 				//fseek(file_name,(s->BS)*(s->offset+i), 0);
 				break;
@@ -428,8 +507,8 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 		newnode.direct_pointer[i] = -1;
 		//cout << newnode.direct_pointer[i] << " ";
 	}
-	cout<<"Hi"<<endl;
-	cout<<newnode.filename<<endl;
+	//cout<<"Hi"<<endl;
+	//cout<<newnode.filename<<endl;
 	//set file length MAYBE
 
 	//update inode which flips bit at that index
@@ -447,8 +526,10 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 	cout << ret.filename << endl;
 	//cout << newnode->filename <<endl;
 	//cout << fread(newnode,sizeof(Inode),1,fp) <<endl;
+	fseek(fp,0,0);
+	fwrite(&sb,sizeof(sb),1,fp);
 	fclose(fp);
-	cout << "hi " <<endl;
+	//cout << "hi " <<endl;
 	//free(tempinode);
 	//exit(1);
 	
@@ -486,7 +567,7 @@ int main(int argc, char * argv[]){
 	bool temp[128];
 	bool temp2[128];
 	bool *freeB=new bool[s.numB];
-	cout<<s.BS<<endl;
+	//cout<<s.BS<<endl;
 	if(s.BS<256){
 		fread(ch1,s.BS,1,fd);
 		memcpy(&temp,&ch1,sizeof(ch1));
@@ -502,11 +583,11 @@ int main(int argc, char * argv[]){
 		//cout<<ch1[0]<<endl;
 		memcpy(&(fs->inArr),&ch1,sizeof(ch1));
 	}
-	cout<<fs->inArr[100]<<endl;
+	//cout<<fs->inArr[100]<<endl;
 	fseek(fd,((s.BS)*(s.freeBA)),0);
 	int count=0;
 	int countB=s.freeBA;
-	cout<<"Free BA:"<<s.freeBA<<endl;
+	//cout<<"Free BA:"<<s.freeBA<<endl;
 	bool temp3[s.BS];
 	while(count<s.numB){
 		fread(ch1,s.BS,1,fd);
@@ -518,7 +599,7 @@ int main(int argc, char * argv[]){
 		countB++;
 		fseek(fd,(s.BS)*countB,0);
 	}
-	cout<<freeB[136]<<endl;
+	//cout<<freeB[136]<<endl;
 	
 	char in[s.BS];
 	for(int i=0;i<256;i++){
@@ -532,9 +613,9 @@ int main(int argc, char * argv[]){
 		}
 	}
 
-	ifstream cmd_file ("input.txt");
+	ifstream cmd_file (argv[1]);
 
-	while(getline(cmd_file, cmd,'\n')){
+	while(getline(cmd_file, cmd,'\n')||true){
 		args.clear();
 		istringstream ss(cmd);
 		while(ss >> token){
@@ -548,7 +629,7 @@ int main(int argc, char * argv[]){
 		}
 		if(args[0] == "CREATE"){
 			fs->create(args,s);
-			cout << "hiii" <<endl;
+			//cout << "hiii" <<endl;
 			if (args.size() < 2) {
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
@@ -560,6 +641,7 @@ int main(int argc, char * argv[]){
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
 			}
+			fs->import(args,s,freeB);
 		}
 		else if(args[0] == "CAT"){
 			//fs->cat(args);
@@ -574,7 +656,7 @@ int main(int argc, char * argv[]){
 				cout << "Incorrect number of arguments. " << endl;
 				continue;
 			}
-			fs->del(args,s);
+			fs->del(args,s,freeB);
 		}
 		else if(args[0] == "WRITE"){
 			if (args.size() < 5) {
@@ -596,7 +678,20 @@ int main(int argc, char * argv[]){
 			
 		}
 		else if(args[0] == "SHUTDOWN"){
-			
+			fseek(fd,s.BS,0);
+			if(s.BS>=256){
+				//for(int i=0;i<256;i++) b[i]=true;
+				fwrite(&fs->inArr,sizeof(fs->inArr),1,fd);
+			}else{
+				bool b[128];
+				for(int i=0;i<128;i++) b[i]=fs->inArr[i];
+				fwrite(&b,sizeof(b),1,fd);
+				fseek(fd,2*s.BS,0);
+				for(int i=0;i<128;i++) b[i]=fs->inArr[i+128];
+				fwrite(&b,sizeof(b),1,fd);
+				fclose(fd);
+				exit(0);
+			}
 		}
 	}
 /*
@@ -608,5 +703,5 @@ int main(int argc, char * argv[]){
 		
 	}*/
 
-	fclose(fd);
+	
 }

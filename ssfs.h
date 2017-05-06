@@ -14,9 +14,9 @@ public:
 	map <string, int> inodeMap;
 	map <string, int>::iterator it;
 	void create(std::vector<std::string> args,SuperBlock sb);
-	void import(std::vector<std::string> args);
+	void import(std::vector<std::string> args,SuperBlock sb, bool*freeB);
 	void cat(std::vector<std::string> args,SuperBlock sb);
-	void del(std::vector<std::string> args,SuperBlock sb);
+	void del(std::vector<std::string> args,SuperBlock sb,bool *freeB);
 	void write(std::vector<std::string> args,SuperBlock sb,bool *freeB);
 	void read(std::vector<std::string> args,SuperBlock sb);
 	void list(SuperBlock sb);
