@@ -16,30 +16,30 @@
 #include "ssfs.h"
 //#include "Inode.cpp"
 
-const int DISKSIZE = 4096;
-const int BLOCKSIZE = 128;
-const int DIRECTBLOCKS = 12;
+//const int DISKSIZE = 4096;
+//const int BLOCKSIZE = 128;
+//const int DIRECTBLOCKS = 12;
 
 using namespace std;
 
-ssfs::ssfs(std::vector<std::string> args, int file_size, int block_size, int direct_blocks){
+ssfs::ssfs(std::vector<std::string> args, int file_size1, int block_size1, int direct_blocks1){
 	
-	file_size = 0;
-	block_size = BLOCKSIZE;
-	direct_blocks = DIRECTBLOCKS;
+	file_size = file_size1;
+	block_size = block_size1;
+	direct_blocks = direct_blocks1;
 }
 
 void ssfs::list(SuperBlock sb){
 	Inode node;
-	char name[32];
+	//char name[32];
 	char ch[sb.BS];
-	int size;
+	//int size;
 	FILE *fp;
 	fp=fopen("DISK","rb+");
 	for(int i =0; i<256; i++){
 		//cout << inArr[i] << endl;
 		if(!inArr[i]){
-			//cout << "hi " <<endl;
+			//cout << "hi " <<i<<" "<<sb.inode<<endl;
 			fseek(fp,(sb.BS)*(i+sb.inode),0);
 			fread(ch,sizeof(ch),1,fp);
 			memcpy(&node,&ch,sizeof(node));
@@ -82,7 +82,7 @@ void ssfs::read(vector<string> args, SuperBlock sb){
 	int tempNum=num_bytes;
 	int arr[endB-startB+1];
 	//cout<<num_bytes/sb.BS<<endl;
-	cout<<endB<<" "<<startB<<endl;
+	//cout<<endB<<" "<<startB<<endl;
 	//start_byte = startB + (sb.BS*newnode.direct_pointer[startI]);
 	//fseek(fp,start_byte,0);
 	int count=0;
@@ -663,10 +663,12 @@ void ssfs::create(vector<string> args,SuperBlock sb){
 	//fseek(fp, sb.off +inode_num *sb.BS, SEEK_SET);
 	fseek(fp,sb.BS*(inode_num+sb.inode),0);
 	fwrite(&newnode,sizeof(newnode),1,fp);
+	//cout<<"HELLO: "<<newnode.filename<<endl;
 	fclose(fp);
 	fp=fopen("DISK","rb+");
 	Inode ret;
 	fseek(fp, (sb.inode +inode_num) *sb.BS, 0);
+	//cout<<"FUCK "<<sb.inode<<endl;
 	char ch2[sb.BS];
 	fread(ch2, sb.BS, 1, fp);
 	memcpy(&ret,&ch2,sizeof(ret));
@@ -690,14 +692,17 @@ int main(int argc, char * argv[]){
 	fread(ch,128,1,fd);
 	SuperBlock s;
 	memcpy(&s,&ch,sizeof(SuperBlock));
-
+	/*cout<<s.freeB<<endl;
+	cout<<s.off<<endl;
+	cout<<s.inode<<endl;
+	cout<<s.freeBA<<endl;*/
 	vector<string> args;
 	string cmd;
 
 	string token;
 
 	//if(argc > 1){
-		ssfs *fs = new ssfs(args, DISKSIZE, BLOCKSIZE, DIRECTBLOCKS);
+		ssfs *fs = new ssfs(args, s.numB, s.BS, 12);
 	//}
 
 
@@ -722,13 +727,14 @@ int main(int argc, char * argv[]){
 		fread(ch1,s.BS,1,fd);
 		memcpy(&temp2,&ch1,sizeof(ch1));
 		for(int i=0;i<256;i++){
-			if(1<128) fs->inArr[i]=temp[i];
+			if(i<128) fs->inArr[i]=temp[i];
 			else fs->inArr[i]=temp2[i-128];
 		}
 	}else{
 		fread(ch1,s.BS,1,fd);
 		//cout<<ch1[0]<<endl;
 		memcpy(&(fs->inArr),&ch1,sizeof(ch1));
+		//cout<<fs->inArr[10]<<endl;
 	}
 	//cout<<fs->inArr[100]<<endl;
 	fseek(fd,((s.BS)*(s.freeBA)),0);
@@ -751,15 +757,17 @@ int main(int argc, char * argv[]){
 	char in[s.BS];
 	for(int i=0;i<256;i++){
 		if(!fs->inArr[i]){
+			//cout<<"HERE NOW: "<<s.inode<<endl; 
 			fseek(fd,(s.BS)*(s.inode+i),0);
 			fread(in,s.BS,1,fd);
 			Inode n;
 			memcpy(&n,&in,sizeof(in));
+			//cout<<n.filename<<endl;
 			fs->inodeMap[n.filename]=i;
-			//cout<<"hi"<<endl;
+			//cout<<"hi "<<n.filename<<endl;
 		}
 	}
-
+	//cout<<"HERE :"<<fs->inodeMap["temp2.txt"]<<endl;
 	ifstream cmd_file (argv[1]);
 
 	while(getline(cmd_file, cmd,'\n')||true){
@@ -827,34 +835,39 @@ int main(int argc, char * argv[]){
 		else if(args[0] == "SHUTDOWN"){
 			fseek(fd,s.BS,0);
 			if(s.BS>=256){
+				bool b[s.BS];
+				for(int i=0;i<256;i++) b[i]=fs->inArr[i];
 				//for(int i=0;i<256;i++) b[i]=true;
-				fwrite(&fs->inArr,sizeof(fs->inArr),1,fd);
+				fwrite(&b,sizeof(b),1,fd);
 			}else{
 				bool b[128];
 				for(int i=0;i<128;i++) b[i]=fs->inArr[i];
-				fwrite(&b,sizeof(b),1,fd);
+				fwrite(&b,sizeof(s.BS),1,fd);
 				fseek(fd,2*s.BS,0);
 				for(int i=0;i<128;i++) b[i]=fs->inArr[i+128];
-				fwrite(&b,sizeof(b),1,fd);
-				fclose(fd);
-				exit(0);
+				fwrite(&b,sizeof(s.BS),1,fd);
+				
+				
 			}
 			int start=0;
-			int temp1[s.BS];
-			if(s.BS==128) start=3;
-			else start = 2;
+			bool temp1[s.BS];
+			//cout<<"BLOCK SIZE: "<<s.BS<<endl;
+			if(s.BS==128) {start=3;}
+			else {start = 2;}
+			//cout<<start<<endl;
 			fseek(fd,start*s.BS,0);
 			int counter=0;
-			for(int i=0;i<s.numB;i++){
+			for(int i=0;i<(s.numB/s.BS);i++){
 				for(int x=0;x<s.BS;x++){
-					temp1[x]=freeB[count];
-					count++;
+					temp1[x]=freeB[counter];
+					counter++;
 				}
 				fwrite(&temp1,sizeof(temp1),1,fd);
-				i+=s.BS;
+				//i+=s.BS;
 
 			}
-
+			fclose(fd);
+			exit(0);
 
 		}
 	}
