@@ -11,11 +11,11 @@ mkdisk.o:	mkdisk.cpp Inode.h
 SuperBlock.o: SuperBlock.cpp SuperBlock.h
 	g++ $(FLAGS) -c SuperBlock.cpp  -o SuperBlock.o
 
-ssfs: ssfs.o SuperBlock.o
+ssfs: ssfs.o SuperBlock.o ssfs.h
 	g++ $(FLAGS) ssfs.o -o ssfs
 
 ssfs.o:	ssfs.cpp Inode.h
 	g++ $(FLAGS) -c ssfs.cpp  -o ssfs.o
 
 clean:
-	rm -f *.o ssfs_mkdsk
+	rm -f *.o ssfs_mkdsk ssfs DISK
