@@ -10,7 +10,6 @@
 #include "SuperBlock.cpp"
 #include "Inode.h"
 #include <map>
-//#include <string>
 #include <cstring>
 #include <vector>
 #include "buffer.h"
@@ -138,7 +137,7 @@ void ssfs::read(vector<string> args, SuperBlock sb){
 }
 
 //Cat and read are pretty much the same thing rip
-//DID not account for indirect and double indirect pointers yet
+//DID not account for double indirect pointers yet
 void ssfs::cat(vector<string> args, SuperBlock sb){
 	cout << "CAT FUNCTION" << endl;	
 	//Get arguments
@@ -181,7 +180,7 @@ void ssfs::cat(vector<string> args, SuperBlock sb){
 		memcpy(&indir,&block_buff,sizeof(indir));
 		//cout<<indir[0]<<endl;
 		int num=newnode.file_size/sb.BS-12;
-		for(int i=0;i<num;i++){
+		for(int i=0;i<=num;i++){
 			fseek(fp,sb.BS*indir[i],0);
 			fread(block_buff,sb.BS,1,fp);
 			for (int j=0; j<sb.BS; j++){
@@ -264,18 +263,6 @@ void ssfs::import(vector<string> args, SuperBlock sb, bool *freeB){
 		cout << "FILE DOES NOT EXIST. CREATING NEW FILE" << unix_filename << endl;
 		create(create_args, sb);
 	}
-	/*FILE*fp = fopen("DISK", "rb+");
-	//seek to where inode is, inode pos from inode map	
-	fseek(fp,sb.BS*(inode_pos+sb.inode),0);
-	char ch4[sb.BS];	
-	//read in inode data	
-	fread(ch4,sb.BS,1,fp);
-	//create new inode	
-	Inode newnode;
-	//copy data into inode variable	
-	memcpy(&newnode,&ch4,sizeof(newnode));
-	*/
-	//Opening file stream and setting up write args
 	ifstream unix_fs(unix_filename);
 	string line;
 	vector<string> write_args(5);
@@ -852,16 +839,26 @@ int main(int argc, char * argv[]){
 				fclose(fd);
 				exit(0);
 			}
+			int start=0;
+			int temp1[s.BS];
+			if(s.BS==128) start=3;
+			else start = 2;
+			fseek(fd,start*s.BS,0);
+			int counter=0;
+			for(int i=0;i<s.numB;i++){
+				for(int x=0;x<s.BS;x++){
+					temp1[x]=freeB[count];
+					count++;
+				}
+				fwrite(&temp1,sizeof(temp1),1,fd);
+				i+=s.BS;
+
+			}
+
+
 		}
 	}
-/*
-	while(getline(cmd_file, cmd)){
-		args.clear();
-		istringstream ss(cmd);
-		args.push_back(cmd);
-		cout << args[0] <<endl;
-		
-	}*/
+
 
 	
 }
